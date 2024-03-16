@@ -41,8 +41,8 @@ MODEL_COST_PER_INPUT = {
     "gpt-3.5-turbo-16k-0613": 0.0000015,
     "gpt-3.5-turbo-0613": 0.0000015,
     "gpt-3.5-turbo-1106": 0.000001,
-    "gpt-35-turbo-0613": 0.0000015,
-    "gpt-35-turbo": 0.0000015,  # probably still 0613
+    "gpt-3.5-turbo-0613": 0.0000015,
+    "gpt-3.5-turbo": 0.0000015,  # probably still 0613
     "gpt-4-0613": 0.00003,
     "gpt-4-32k-0613": 0.00006,
     "gpt-4-1106-preview": 0.00001,
@@ -55,8 +55,8 @@ MODEL_COST_PER_OUTPUT = {
     "gpt-3.5-turbo-16k-0613": 0.000002,
     "gpt-3.5-turbo-16k": 0.000002,
     "gpt-3.5-turbo-1106": 0.000002,
-    "gpt-35-turbo-0613": 0.000002,
-    "gpt-35-turbo": 0.000002,
+    "gpt-3.5-turbo-0613": 0.000002,
+    "gpt-3.5-turbo": 0.000002,
     "gpt-4-0613": 0.00006,
     "gpt-4-32k-0613": 0.00012,
     "gpt-4-32k": 0.00012,
@@ -91,7 +91,7 @@ def calc_cost(model_name, input_tokens, output_tokens):
     return cost
 
 
-@retry(wait=wait_random_exponential(min=30, max=600), stop=stop_after_attempt(3))
+# @retry(wait=wait_random_exponential(min=30, max=600), stop=stop_after_attempt(2))
 def call_chat(model_name_or_path, inputs, use_azure, temperature, top_p, **model_args):
     """
     Calls the openai API to generate completions for the given inputs.
@@ -202,21 +202,29 @@ def openai_inference(
             instance_id = datum["instance_id"]
             if instance_id in existing_ids:
                 continue
+
             output_dict = {"instance_id": instance_id}
             output_dict.update(basic_args)
             output_dict["text"] = f"{datum['text']}\n\n"
-            response, cost = call_chat(
-                output_dict["model_name_or_path"],
-                output_dict["text"],
-                use_azure,
-                temperature,
-                top_p,
-            )
+
+            try:
+                response, cost = call_chat(
+                    output_dict["model_name_or_path"],
+                    output_dict["text"],
+                    use_azure,
+                    temperature,
+                    top_p,
+                )
+            except Exception as e:
+                continue
+
             completion = response.choices[0]["message"]["content"]
             total_cost += cost
             print(f"Total Cost: {total_cost:.2f}")
+
             output_dict["full_output"] = completion
             output_dict["model_patch"] = extract_diff(completion)
+
             print(json.dumps(output_dict), file=f, flush=True)
             if max_cost is not None and total_cost >= max_cost:
                 print(f"Reached max cost {max_cost}, exiting")
